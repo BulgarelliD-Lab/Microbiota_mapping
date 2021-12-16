@@ -1,0 +1,49 @@
+
+workingDir: /cluster/db/mecoulter/RNAseq2/
+
+genomeDir: /cluster/db/mecoulter/genomes/
+
+transcriptomeDir: /cluster/db/mecoulter/BaRT2v18/
+
+
+fastq_screen_config: /homes/mecoulter/miniconda3/share/fastq-screen-0.14.0-0/fastq_screen.conf
+
+
+
+samples:
+- CEM01_JH15-104
+- CEM01_JH15-105
+- CEM01_JH15-115
+- CEM01_JH15-117
+- CEM01_JH15-14
+- CEM01_JH15-22
+- CEM01_JH15-26
+- CEM01_JH15-32
+- CEM01_JH15-35
+- CEM01_JH15-51
+- CEM01_JH15-7
+- CEM01_JH15-91
+- CEM01_JH15-95
+- CEM01_JH15-96
+- CEM01_JH15-113
+
+Barke_samples:
+- CEM01_JH15-113
+- CEM01_JH15-117
+- CEM01_JH15-22
+- CEM01_JH15-91
+- CEM01_JH15-96
+
+HEB_124_17_samples:
+- CEM01_JH15-105
+- CEM01_JH15-14
+- CEM01_JH15-26
+- CEM01_JH15-51
+- CEM01_JH15-7
+
+HEB_124_52_samples:
+- CEM01_JH15-104
+- CEM01_JH15-115
+- CEM01_JH15-32
+- CEM01_JH15-35
+- CEM01_JH15-95

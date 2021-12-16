@@ -1,0 +1,678 @@
+"""Snakemake file for processing RNA-Seq data using STAR for host rhizophere candidate gene identification"""
+
+
+#To run (this is how I ran it):
+
+#snakemake --forceall --dag|dot -Tpdf > dag.pdf
+#snakemake -c "qsub -jc 4week -V -cwd -o snakelog -e snakelog -pe smp {threads}" --jobs=100 --use-conda --latency-wait 100
+
+import glob
+configfile: "config.yaml"
+
+
+# Genome files
+genomeName = "barke_split"
+wildgenomeName = "B1K-04-12_pseudomolecules_v1_split"
+gtfFileName = "BaRT2v18_transfix_split.gtf"
+RTDname = "BaRT2v18"
+
+
+genomeFile = config['genomeDir'] + genomeName + ".fasta"
+wildgenomeFile = config['genomeDir'] + wildgenomeName + ".fasta"
+gtfFile = "/cluster/db/mecoulter/BaRT2v18/" + gtfFileName
+RTDFasta = config['transcriptomeDir'] + RTDname + ".fa"
+
+
+
+genomeIndex = config['genomeDir'] + genomeName + ".fai"
+wildgenomeIndex = config['genomeDir'] + wildgenomeName + ".fai"
+
+barke_qtlregion = 'chr3H_part_1:31181340-38970860'
+
+#AdapterSequence = "CTGTCTCTTATACACATCT"
+
+# Fastq Screen config file
+fscreenConfig = config['fastq_screen_config']
+
+#Qualimap
+group_info = "sample_groups.txt"
+
+# SAMPLES
+
+PAIRS = ["R1", "R2"]
+SAMPLES = config['samples']
+BARKE_SAMPLES = config['Barke_samples']
+HEB_124_17_SAMPLES = config['HEB_124_17_samples']
+HEB_124_52_SAMPLES = config['HEB_124_52_samples']
+
+ALL_SAMPLES = ["Barke", "HEB_124_17", "HEB_124_52"]
+
+
+# Files to test if an index was created
+starIndexDir = "star_index"
+starIndexDir2 = "star_index2"
+starIndexDir3 = "star_index3"
+starIndexDir_wild = "star_index_wild"
+starIndexDir_wild2 = "star_index_wild2"
+
+starIndexTestFile = starIndexDir + "/chrName.txt"
+starIndexTestFile2 = starIndexDir2 + "/chrName.txt"
+starIndexTestFile3 = starIndexDir3 + "/chrName.txt"
+
+starIndexTestFileWild = starIndexDir_wild + "/chrName.txt"
+starIndexTestFileWild2 = starIndexDir_wild2 + "/chrName.txt"
+# Lists for rule all
+#config[genomeDir] + genomeName
+QCS = expand("qc/{sample}_{pair}_001_fastqc.html", sample=SAMPLES, pair=PAIRS)
+FASTQSCREENS = expand("fscreen/{sample}_{pair}_001_screen.html", sample=SAMPLES, pair=PAIRS)
+MULTIQC = ["multiqc/report.html"]
+TRIMGALORE = expand("trimgalore/{sample}_R1_001_val_1.fq.gz", sample=SAMPLES) + expand("trimgalore/{sample}_R2_001_val_2.fq.gz", sample=SAMPLES)
+TRIMGALORE_QCS = expand("trimgalore_qc/{sample}_R1_001_val_1_fastqc.html", sample=SAMPLES) + expand("trimgalore_qc/{sample}_R2_001_val_2_fastqc.html", sample=SAMPLES)
+TRIMGALORE_MULTIQC = ["trimgalore_multiqc/report.html"]
+SALMON_INDEX = ["salmon/salmon_index"]
+SALMON = expand("salmon/quants/{sample}/quant.sf", sample=SAMPLES)
+
+JOIN_BARKE = ["trimgalore/Barke_R1.fq.gz", "trimgalore/Barke_R2.fq.gz"]
+JOIN_17 = ["trimgalore/HEB_124_17_R1.fq.gz", "trimgalore/HEB_124_17_R2.fq.gz"]
+JOIN_52 = ["trimgalore/HEB_124_52_R1.fq.gz", "trimgalore/HEB_124_52_R2.fq.gz"]
+
+ALL_BAMS = expand("bam_all/{sample}.bam", sample=ALL_SAMPLES)
+ALL_SJS = ["sjs_all/filtered_sjs.tab"]
+ALL_BAMS2 = expand("bam_all2/{sample}.bam", sample=ALL_SAMPLES)
+
+BAMS = expand("bam/{sample}.bam", sample=SAMPLES)
+SJs = ["sjs/filtered_sjs.tab"]
+BAMS2 = expand("bam2/{sample}.bam", sample=SAMPLES)
+
+QUALIMAP_RNA = expand("qualimap2_RNA/{sample}.pdf",sample=SAMPLES)
+QUALIMAP_ALL = ["qualimap_all2/results.pdf"]
+BAIS = expand("bam2/{sample}.bam.bai", sample=SAMPLES)
+
+
+SALMON_INDEX2 = ["salmon2/salmon_index"]#Salmon is repeated using a new transcriptome
+SALMON2 = expand("salmon2/quants/{sample}/quant.sf", sample=SAMPLES)
+
+SORTED_BARKE = expand("bam_all2_sorted/{sample}.bam", sample=ALL_SAMPLES)
+INDEX_BARKE = expand("bam_all2_sorted/{sample}.bam.bai", sample=ALL_SAMPLES)
+
+
+CALMD = expand("calmd/{sample}.bam", sample=ALL_SAMPLES)
+CALMD_INDEX = expand("calmd/{sample}.bam.bai", sample=ALL_SAMPLES)
+OPOSSUM = expand("opossum/{sample}.bam", sample=ALL_SAMPLES) + expand("opossum/{sample}.bam.bai", sample=ALL_SAMPLES)
+PLATYPUS = expand("platypus/{sample}.vcf", sample=ALL_SAMPLES)
+
+BGZIP = expand("bgzip/{sample}.vcf.gz", sample=ALL_SAMPLES)
+BCF_INDEX = expand("bgzip/{sample}.vcf.gz.csi", sample=ALL_SAMPLES)
+BCF_MERGE = ["bcftools/all.vcf.gz"]
+BCF_REGION = ["bcftools/3H_locus.vcf"]
+VCF_FILTER = ["bcftools/3H_locus_filtered.vcf"]
+SNPEFF = ["bcftools/3H_locus_filtered.anno.vcf"]
+####################################################################
+
+
+
+rule all:
+	input: CALMD + CALMD_INDEX + OPOSSUM + PLATYPUS + BGZIP + BCF_INDEX + BCF_MERGE + BCF_REGION
+####################################################################
+# Quality control
+
+rule fastqc:
+	input:
+		R1 = "rawdata/{sample}_R1_001.fastq.gz",
+		R2 = "rawdata/{sample}_R2_001.fastq.gz"
+	output:
+		"qc/{sample}_R1_001_fastqc.html",
+		"qc/{sample}_R2_001_fastqc.html"
+	threads: 40
+	conda:
+		"envs/home.yaml"
+	shell:
+		"fastqc -o qc --threads {threads} -f fastq {input.R1} {input.R2}"
+
+####################################################################
+# Fastq Screen
+#   genomes must be installed manually: fastq_screen --get_genomes
+#Used bowtie2 to build index: qsub -b y -j yes bowtie2-build --threads 20 /cluster/db/mecoulter/genomes/barke_split.fasta barke_barley
+#   and config file prepared fastq_screen --add_genome 'barke_split','/cluster/db/mecoulter/RNAseq2/FastQ_Screen_Genomes/barke_barley/barke_barley','Split version of barke genome'
+
+rule fastq_screen:
+	input:
+		R1 = "rawdata/{sample}_R1_001.fastq.gz",
+		R2 = "rawdata/{sample}_R2_001.fastq.gz"
+	output:
+		"fscreen/{sample}_R1_001_screen.html",
+		"fscreen/{sample}_R2_001_screen.html"
+	threads: 20
+	conda:
+		"envs/home.yaml"
+	shell:
+		"fastq_screen --outdir fscreen --threads {threads} {input.R1} {input.R2}"
+
+rule multiqc:
+	input: expand("fscreen/{sample}_{pair}_001_screen.html", sample=SAMPLES, pair=PAIRS) + expand("qc/{sample}_{pair}_001_fastqc.html", sample=SAMPLES, pair=PAIRS)
+	output: "multiqc/report.html"
+	conda:
+		"envs/home.yaml"
+	shell:
+		"multiqc -f --filename report --outdir multiqc qc fscreen"
+
+#################################################################
+#Run trim galore
+
+rule trim_galore:
+	input:
+		R1 = "rawdata/{sample}_R1_001.fastq.gz",
+		R2 = "rawdata/{sample}_R2_001.fastq.gz",
+	output:
+		"trimgalore/{sample}_R1_001_val_1.fq.gz",
+		"trimgalore/{sample}_R2_001_val_2.fq.gz"
+	threads: 16
+	conda:
+		"envs/home.yaml"
+	shell:
+		"trim_galore -o trimgalore/ -q 20 --illumina --paired -j {threads} {input.R1} {input.R2}"
+
+
+####################################################################
+# Final multiqc from fastqc and fast_screen
+
+rule fastqc2:
+	input:
+		R1 = "trimgalore/{sample}_R1_001_val_1.fq.gz",
+		R2 = "trimgalore/{sample}_R2_001_val_2.fq.gz"
+	output:
+		"trimgalore_qc/{sample}_R1_001_val_1_fastqc.html",
+		"trimgalore_qc/{sample}_R2_001_val_2_fastqc.html"
+	threads: 40
+	conda:
+		"envs/home.yaml"
+	shell:
+		"fastqc -o trimgalore_qc --threads {threads} -f fastq {input.R1} {input.R2}"
+
+rule multiqc2:
+	input: expand("trimgalore_qc/{sample}_R1_001_val_1_fastqc.html", sample=SAMPLES) + expand("trimgalore_qc/{sample}_R2_001_val_2_fastqc.html", sample=SAMPLES)
+	output: "trimgalore_multiqc/report.html"
+	conda:
+		"envs/home.yaml"
+	shell:
+		"multiqc -f --filename report --outdir trimgalore_multiqc trimgalore_qc"
+
+
+####################################################################
+#Run Salmon:
+
+rule salmon_index:
+	input: RTDFasta
+	output: directory("salmon/salmon_index")
+	conda:
+		"envs/home.yaml"
+	shell:
+		"salmon index -t {input} -i salmon/salmon_index"
+
+rule salmon:
+	input:
+		R1 = "trimgalore/{sample}_R1_001_val_1.fq.gz",
+		R2 = "trimgalore/{sample}_R2_001_val_2.fq.gz",
+		index = "salmon/salmon_index"
+	output: "salmon/quants/{sample}/quant.sf"
+	threads: 30
+	conda:
+		"envs/home.yaml"
+	shell:
+		"""salmon quant \
+		-i {input.index} \
+		-l A \
+		-1 {input.R1} \
+		-2 {input.R2} \
+		-p {threads} \
+		--seqBias \
+		--posBias \
+		--validateMappings \
+		-o salmon/quants/{wildcards.sample}"""
+
+####################################################################
+# Index genome
+
+rule index_genome:
+	input: genomeFile
+	output: genomeIndex
+	conda:
+		"envs/home.yaml"
+	shell:
+		"samtools faidx {input}"
+
+
+####################################################################
+
+
+#########################
+#Join fastq files for variant calling
+rule join_fastq_Barke:
+	input:
+		R1 = expand("trimgalore/{sample}_R1_001_val_1.fq.gz", sample=BARKE_SAMPLES),
+		R2 = expand("trimgalore/{sample}_R2_001_val_2.fq.gz", sample=BARKE_SAMPLES)
+	output:
+		R1 = "trimgalore/Barke_R1.fq.gz",
+		R2 = "trimgalore/Barke_R2.fq.gz"
+	shell:
+		"cat {input.R1} >> {output.R1}; cat {input.R2} >> {output.R2}"
+
+rule join_fastq_17:
+	input:
+		R1 = expand("trimgalore/{sample}_R1_001_val_1.fq.gz", sample=HEB_124_17_SAMPLES),
+		R2 = expand("trimgalore/{sample}_R2_001_val_2.fq.gz", sample=HEB_124_17_SAMPLES)
+	output:
+		R1 = "trimgalore/HEB_124_17_R1.fq.gz",
+		R2 = "trimgalore/HEB_124_17_R2.fq.gz"
+	shell:
+		"cat {input.R1} >> {output.R1}; cat {input.R2} >> {output.R2}"
+
+rule join_fastq_52:
+	input:
+		R1 = expand("trimgalore/{sample}_R1_001_val_1.fq.gz", sample=HEB_124_52_SAMPLES),
+		R2 = expand("trimgalore/{sample}_R2_001_val_2.fq.gz", sample=HEB_124_52_SAMPLES)
+	output:
+		R1 = "trimgalore/HEB_124_52_R1.fq.gz",
+		R2 = "trimgalore/HEB_124_52_R2.fq.gz"
+	shell:
+		"cat {input.R1} >> {output.R1}; cat {input.R2} >> {output.R2}"
+
+# STAR
+
+rule star_index:
+	input:
+		fasta = genomeFile,
+		gtf = gtfFile
+	output: temp(starIndexTestFile)
+	threads: 20
+	log: "logs/star_index.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+		STAR \
+		--runMode genomeGenerate \
+		--genomeFastaFiles {input.fasta} \
+		--sjdbGTFfile {input.gtf} \
+		--genomeDir {starIndexDir} \
+		--outFileNamePrefix logs/star_ \
+		--genomeSAindexNbases 12 \
+		--runThreadN {threads} &> {log}
+		"""
+
+
+
+rule star_mapping:
+	input:
+		R1 = "trimgalore/{sample}_R1_001_val_1.fq.gz",
+		R2 = "trimgalore/{sample}_R2_001_val_2.fq.gz",
+		testfile = starIndexTestFile
+	output:
+		bam = "bam/{sample}.bam",
+		finallog = "starmap/{sample}_Log.final.out",
+		sjs = "sjs/{sample}__SJ.out.tab"
+	threads: 12
+	log: "starmap/{sample}_run.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+			STAR \
+			--genomeDir {starIndexDir} \
+			--sjdbGTFfile {gtfFile} \
+			--readFilesIn {input.R1} {input.R2} \
+			--outFileNamePrefix starmap/{wildcards.sample}_ \
+			--outSAMtype BAM SortedByCoordinate \
+			--outFilterMultimapNmax 15 \
+			--outFilterMatchNminOverLread 0.98 \
+			--outFilterMismatchNoverReadLmax 0.02 \
+			--outFilterMismatchNmax 4 \
+			--alignMatesGapMax 2000 \
+			--alignEndsType EndToEnd \
+			--alignIntronMin 60 \
+			--alignIntronMax 15000 \
+			--readFilesCommand zcat \
+			--outReadsUnmapped Fastx \
+			--runThreadN {threads} &> {log}
+			mv starmap/{wildcards.sample}_Aligned.sortedByCoord.out.bam {output.bam}
+			mv starmap/{wildcards.sample}_SJ.out.tab {output.sjs}
+		"""
+
+
+####################################################################
+
+rule filter_sjs:
+	input: expand("sjs/{sample}__SJ.out.tab", sample=SAMPLES)
+	output: "sjs/filtered_sjs.tab"
+	conda:
+		"envs/home.yaml"
+	shell:
+		"python generate_HC_sjs.py -i sjs -o {output} --s 4 --oh 10"
+
+rule star_index2:
+	input:
+		fasta = genomeFile,
+		gtf = gtfFile,
+		sjs = "sjs/filtered_sjs.tab"
+	output: starIndexTestFile2
+	threads: 20
+	log: "logs/star_index2.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+		STAR \
+		--runMode genomeGenerate \
+		--genomeFastaFiles {input.fasta} \
+		--sjdbGTFfile {input.gtf} \
+		--sjdbFileChrStartEnd {input.sjs} \
+		--genomeDir {starIndexDir2} \
+		--outFileNamePrefix logs/star_ \
+		--genomeSAindexNbases 12 \
+		--runThreadN {threads} &> {log}
+		"""
+
+rule star_mapping2:
+	input:
+		R1 = "trimgalore/{sample}_R1_001_val_1.fq.gz",
+		R2 = "trimgalore/{sample}_R2_001_val_2.fq.gz",
+		testfile = starIndexTestFile2
+	output:
+		bam = "bam2/{sample}.bam",
+		finallog = "starmap2/{sample}_Log.final.out"
+	threads: 12
+	log: "starmap2/{sample}_run.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+			STAR \
+			--genomeDir {starIndexDir2} \
+			--sjdbGTFfile {gtfFile} \
+			--readFilesIn {input.R1} {input.R2} \
+			--outFileNamePrefix starmap2/{wildcards.sample}_ \
+			--outSAMtype BAM SortedByCoordinate \
+			--outFilterMultimapNmax 15 \
+			--outFilterMatchNminOverLread 0.98 \
+			--outFilterMismatchNoverReadLmax 0.02 \
+			--outFilterMismatchNmax 4 \
+			--alignMatesGapMax 2000 \
+			--alignEndsType EndToEnd \
+			--alignIntronMin 60 \
+			--alignIntronMax 15000 \
+			--outFilterIntronMotifs RemoveNoncanonical \
+			--readFilesCommand zcat \
+			--outReadsUnmapped Fastx \
+			--runThreadN {threads} &> {log}
+			mv starmap2/{wildcards.sample}_Aligned.sortedByCoord.out.bam {output.bam}
+		"""
+
+
+# QC bam files
+
+rule qualimap:
+	input:
+		bam = "bam2/{sample}.bam",
+		gtf = gtfFile
+	output: "qualimap2_RNA/{sample}.pdf"
+	conda:
+		"envs/qualimap.yaml"
+	shell:
+		"qualimap rnaseq -bam {input.bam} -gtf {gtfFile} -p strand-specific-forward -pe -outdir qualimap2_RNA -outfile {wildcards.sample}.pdf --java-mem-size=4G"
+
+#Create input file for qualimap of multiple bam files:
+
+rule create_qualimap_input:
+	input:
+		qualimap = expand("qualimap2_RNA/{sample}.pdf", sample = SAMPLES),
+		groups = group_info
+	output: "qualimap_samples.txt"
+	shell:
+		"python samples_for_qualimap.py -i ./bam2/ -g {input.groups} -o qualimap_samples.txt"
+
+#Now carry out qualimap on all bam files:
+rule qualimap_all:
+	input: "qualimap_samples.txt",
+	output: "qualimap_all2/results.pdf"
+	conda:
+		"envs/qualimap.yaml"
+	shell:
+		"qualimap multi-bamqc -r -d {input} -outdir qualimap_all2 -outfile results.pdf --java-mem-size=4G"
+
+rule start_mapping_all:
+	input:
+		R1 = "trimgalore/{sample}_R1.fq.gz",
+		R2 = "trimgalore/{sample}_R2.fq.gz",
+		testfile = starIndexTestFile
+	output:
+		bam = "bam_all/{sample}.bam",
+		finallog = "starmap_all/{sample}_Log.final.out",
+		sjs = "sjs_all/{sample}__SJ.out.tab"
+	threads: 12
+	log: "starmap_all/{sample}_run.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+			STAR \
+			--genomeDir {starIndexDir} \
+			--sjdbGTFfile {gtfFile} \
+			--readFilesIn {input.R1} {input.R2} \
+			--outFileNamePrefix starmap_all/{wildcards.sample}_ \
+			--outSAMtype BAM SortedByCoordinate \
+			--outFilterMultimapNmax 15 \
+			--outFilterMatchNminOverLread 0.98 \
+			--outFilterMismatchNoverReadLmax 0.02 \
+			--outFilterMismatchNmax 4 \
+			--alignMatesGapMax 2000 \
+			--alignEndsType EndToEnd \
+			--alignIntronMin 60 \
+			--alignIntronMax 15000 \
+			--readFilesCommand zcat \
+			--outReadsUnmapped Fastx \
+			--runThreadN {threads} &> {log}
+			mv starmap_all/{wildcards.sample}_Aligned.sortedByCoord.out.bam {output.bam}
+			mv starmap_all/{wildcards.sample}_SJ.out.tab {output.sjs}
+		"""
+
+rule filter_sjs_all:
+	input: expand("sjs_all/{sample}__SJ.out.tab", sample=ALL_SAMPLES)
+	output: "sjs_all/filtered_sjs.tab"
+	conda:
+		"envs/home.yaml"
+	shell:
+		"python generate_HC_sjs.py -i sjs -o {output} --s 4 --oh 10"
+
+rule star_index_all:
+	input:
+		fasta = genomeFile,
+		gtf = gtfFile,
+		sjs = "sjs_all/filtered_sjs.tab"
+	output: starIndexTestFile3
+	threads: 20
+	log: "logs/star_index3.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+		STAR \
+		--runMode genomeGenerate \
+		--genomeFastaFiles {input.fasta} \
+		--sjdbGTFfile {input.gtf} \
+		--sjdbFileChrStartEnd {input.sjs} \
+		--genomeDir {starIndexDir3} \
+		--outFileNamePrefix logs/star_ \
+		--genomeSAindexNbases 12 \
+		--runThreadN {threads} &> {log}
+		"""
+
+rule start_mapping_all2:
+	input:
+		R1 = "trimgalore/{sample}_R1.fq.gz",
+		R2 = "trimgalore/{sample}_R2.fq.gz",
+		testfile = starIndexTestFile3
+	output:
+		bam = "bam_all2/{sample}.bam",
+		finallog = "starmap_all2/{sample}_Log.final.out"
+	threads: 12
+	log: "starmap_all2/{sample}_run.log"
+	conda:
+		"envs/STAR.yaml"
+	shell:
+		"""
+			STAR \
+			--genomeDir {starIndexDir3} \
+			--sjdbGTFfile {gtfFile} \
+			--readFilesIn {input.R1} {input.R2} \
+			--outFileNamePrefix starmap_all2/{wildcards.sample}_ \
+			--outSAMtype BAM SortedByCoordinate \
+			--outFilterMultimapNmax 15 \
+			--outFilterMatchNminOverLread 0.98 \
+			--outFilterMismatchNoverReadLmax 0.02 \
+			--outFilterMismatchNmax 4 \
+			--alignMatesGapMax 2000 \
+			--alignEndsType EndToEnd \
+			--alignIntronMin 60 \
+			--alignIntronMax 15000 \
+			--outFilterIntronMotifs RemoveNoncanonical \
+			--readFilesCommand zcat \
+			--outReadsUnmapped Fastx \
+			--runThreadN {threads} &> {log}
+			mv starmap_all2/{wildcards.sample}_Aligned.sortedByCoord.out.bam {output.bam}
+		"""
+
+# Index BAM files
+
+rule index_bam:
+	input: "bam_all2/{sample}.bam"
+	output: "bam_all2/{sample}.bam.bai"
+	threads: 20
+	log: "logs/{sample}.index_bam.log"
+	conda:
+		"envs/samtools.yaml"
+	shell:
+		"samtools index {input} &> {log}"
+
+
+rule sort_bam:
+	input:
+		bam = "bam_all2/{sample}.bam",
+		index = "bam_all2/{sample}.bam.bai"
+	output: "bam_all2_sorted/{sample}.bam"
+	log: "logs/{sample}.sort_bam.log"
+	conda:
+		"envs/samtools.yaml"
+	shell:
+		"samtools sort -o {output} {input.bam} &> {log}"
+
+rule index_bam_barke:
+	input: "bam_all2_sorted/{sample}.bam"
+	output: "bam_all2_sorted/{sample}.bam.bai"
+	log: "logs/{sample}.sort_index_bam.log"
+	conda:
+		"envs/samtools.yaml"
+	shell:
+		"samtools index {input} &> {log}"
+
+rule calmd:
+	input:
+		bam = "bam_all2_sorted/{sample}.bam",
+		index = "bam_all2_sorted/{sample}.bam.bai"
+	output: "calmd/{sample}.bam"
+	conda:
+		"envs/samtools.yaml"
+	shell:
+		"samtools calmd -b {input.bam} {genomeFile} > {output}"
+
+rule index_calmd:
+	input: "calmd/{sample}.bam"
+	output: "calmd/{sample}.bam.bai"
+	log: "logs/{sample}.calmd_index.log"
+	conda:
+		"envs/samtools.yaml"
+	shell:
+		"samtools index {input} &> {log}"
+
+rule opossum:
+	input:
+		bam = "calmd/{sample}.bam",
+		index = "calmd/{sample}.bam.bai"
+	output:
+		bam = "opossum/{sample}.bam",
+		index = "opossum/{sample}.bam.bai"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"python /cluster/gjb_lab/mecoulter/Opossum/Opossum.py --BamFile={input.bam} --OutFile={output.bam} --SoftClipsExist True"
+
+rule platypus:
+	input:
+		bam = "opossum/{sample}.bam",
+		index = "opossum/{sample}.bam.bai"
+	output: "platypus/{sample}.vcf"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"python /cluster/gjb_lab/mecoulter/miniconda3/envs/platypus/share/platypus-variant-0.8.1.2-2/Platypus.py callVariants --bamFiles={input.bam} --refFile={genomeFile} --filterDuplicates 0 --minMapQual 0 --minFlank 0 --maxReadLength 500 --minGoodQualBases 10 --minBaseQual 20 --output={output}"
+
+rule bgzip:
+	input: "platypus/{sample}.vcf"
+	output: "bgzip/{sample}.vcf.gz"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"bgzip -c {input} > {output}"
+
+rule bcftools_index:
+	input: "bgzip/{sample}.vcf.gz"
+	output: "bgzip/{sample}.vcf.gz.csi"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"bcftools index {input}"
+
+rule bcftools_merge:
+	input:
+		gz = expand("bgzip/{sample}.vcf.gz", sample=ALL_SAMPLES),
+		index = expand("bgzip/{sample}.vcf.gz.csi", sample=ALL_SAMPLES)
+	output: "bcftools/all.vcf.gz"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"""ls -d bgzip/*.vcf.gz > bcftools/vcf_files.txt;\
+		bcftools merge -l bcftools/vcf_files.txt -o {output}"""
+
+rule bcftools_merge_index:
+	input: "bcftools/all.vcf.gz"
+	output: "bcftools/all.vcf.gz.csi"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"bcftools index {input}"
+
+
+#Now filter vcf file for just the region of interest...
+rule bcftools_region:
+	input:
+		vcf = "bcftools/all.vcf.gz",
+		index = "bcftools/all.vcf.gz.csi"
+	output: "bcftools/3H_locus.vcf"
+	conda:
+		"envs/platypus.yaml"
+	shell:
+		"bcftools view -r {barke_qtlregion} {input.vcf} -o {output}"
+
+
+rule filter_vcf:
+	input: "bcftools/3H_locus.vcf"
+	output: "bcftools/3H_locus_filtered.vcf"
+	shell:
+		"python filter_vcf.py {input} {output}"
+
+rule snpEff:#Requires SNPeff database. Was created for BaRTv2.18
+	input: "bcftools/3H_locus_filtered.vcf"
+	output: "bcftools/3H_locus_filtered.anno.vcf"
+	conda:
+		"envs/snpEff.yaml"
+	shell:
+		"java -Xmx8g -jar /cluster/gjb_lab/mecoulter/miniconda3/envs/SNPeff/share/snpeff-5.0-1/snpEff.jar Barke_BaRT2 {input} > {output}"

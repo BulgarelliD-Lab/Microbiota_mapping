@@ -1,0 +1,8 @@
+name: STAR
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - star=2.7.9a=h9ee0642_0
+prefix: /cluster/gjb_lab/mecoulter/miniconda3/envs/STAR
