@@ -46,16 +46,16 @@ getwd()
 ##################################################
 
 #Import yield data file all lines
-HIF_pheno <- read.delim("HIF_all4_reps_Int_1121.txt", sep = "\t") 
+HIF_pheno <- read.delim("HIF_all4_reps_1121.txt", sep = "\t") 
 
-HIF_pheno<-subset(HIF_pheno, Genotype == "Barke"| Genotype == "Int_17"|Genotype =="Int_52")
+HIF_pheno<-subset(HIF_pheno, Genotype == "Barke"| Genotype == "17"|Genotype =="52")
 
 ###############################
 ##TGW
 ####################################
 #plotting TGW
 
-HIF_pheno$Genotype <- ordered(HIF_pheno$Genotype, levels=c("Barke", "Int_17","Int_52"))
+HIF_pheno$Genotype <- ordered(HIF_pheno$Genotype, levels=c("Barke", "17","52"))
 
 p<-ggplot(HIF_pheno, aes(x=Genotype, y=TGW, fill=Genotype))+ 
   geom_boxplot(position=position_dodge(0.8))+ 
@@ -98,7 +98,7 @@ TukeyHSD(TGW_R4_aov)
 #plotting total weight
 
 ##Order the levels according to a defined order 
-HIF_pheno$Genotype <- ordered(HIF_pheno$Genotype, levels=c("Barke", "Int_17","Int_52"))
+HIF_pheno$Genotype <- ordered(HIF_pheno$Genotype, levels=c("Barke", "17","52"))
 
 p<-ggplot(HIF_pheno, aes(x=Genotype, y=Weight, fill=Genotype))+ 
   geom_boxplot(position=position_dodge(0.8))+ 
