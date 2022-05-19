@@ -1,0 +1,16 @@
+Tissue,brep,srep,experiment,sampling.date,phenotype,quant.files
+HEB_124_17,brep1,srep1,2,08.05.2019,Elite,CEM01_JH15-105
+HEB_124_17,brep2,srep1,2,06.05.2019,Elite,CEM01_JH15-14
+HEB_124_17,brep3,srep1,2,06.05.2019,Elite,CEM01_JH15-26
+HEB_124_17,brep4,srep1,2,06.05.2019,Elite,CEM01_JH15-51
+HEB_124_17,brep5,srep1,2,06.05.2019,Elite,CEM01_JH15-7
+HEB_124_52,brep1,srep1,2,08.05.2019,Wild,CEM01_JH15-104
+HEB_124_52,brep2,srep1,2,08.05.2019,Wild,CEM01_JH15-115
+HEB_124_52,brep3,srep1,2,06.05.2019,Wild,CEM01_JH15-32
+HEB_124_52,brep4,srep1,2,06.05.2019,Wild,CEM01_JH15-35
+HEB_124_52,brep5,srep1,2,07.05.2019,Wild,CEM01_JH15-95
+Barke,brep1,srep1,2,08.05.2019,Elite,CEM01_JH15-113
+Barke,brep2,srep1,2,08.05.2019,Elite,CEM01_JH15-117
+Barke,brep3,srep1,2,06.05.2019,Elite,CEM01_JH15-22
+Barke,brep4,srep1,2,07.05.2019,Elite,CEM01_JH15-91
+Barke,brep5,srep1,2,07.05.2019,Elite,CEM01_JH15-96
