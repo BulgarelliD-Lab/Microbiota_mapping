@@ -10,5 +10,7 @@ We used codes developed by Dr Max Coulter (University of Dundee, now Xelect max.
 - Figure 5 and Supplementary Figures 13-18: please refer to https://github.com/maxecoulter/General
 - Figure 7b and Supplementary Figure 19: please refer to https://github.com/maxecoulter/Transcript_plotter
 
-# Update May 20th, 2022
-Please note the manuscript is still in final revisions
+# Update May 27th, 2022
+Please note that the code for generating Supplementary Fig. 2 is contained in the folder Preprocessing_QRMC-3HS_SFig1
+
+Please also note the manuscript is still in final revisions
